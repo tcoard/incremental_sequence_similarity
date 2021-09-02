@@ -1,5 +1,6 @@
 #!/bin/bash
 RUN_DIR="run_data"
+mkdir -p $RUN_DIR
 
 # make database for each split
 mmseqs createdb split0.fa $RUN_DIR/db0
