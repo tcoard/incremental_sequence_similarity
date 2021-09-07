@@ -2,11 +2,11 @@ import random
 import pandas as pd
 import numpy as np
 
-OUT_DIR = "data"
+OUT_DIR = "100_delete"
 RANDOM_STATE = 1
 NUM_SPLITS = 5
 TOT_NUM_DATABASE_SEQ = 1000000
-TOT_NUM_SEARCH_SEQ = 100000
+TOT_NUM_SEARCH_SEQ = 100
 NUM_PER_SECTION = int(TOT_NUM_SEARCH_SEQ * 0.09)
 NUM_NO_SHARED_COG = int(TOT_NUM_SEARCH_SEQ * 0.1)
 REC_COUNT = 0
@@ -76,6 +76,8 @@ def get_search_sequences(split: pd.DataFrame, left_out: pd.DataFrame, search_seq
     NUM_PER_SECTION sequences that share a COG with a sequence in this split, but are not in any of the splits
     """
     being_added_exact = split.sample(n=NUM_PER_SECTION)
+    with open(f"{OUT_DIR}/exact_matches.txt", "a") as f:
+        print('\n'.join(being_added_exact["id"].values), file=f)
 
     being_added_cog = pd.DataFrame(columns=COLUMNS)
     sampled_cogs = split["cog"].sample(n=NUM_PER_SECTION)
@@ -84,6 +86,9 @@ def get_search_sequences(split: pd.DataFrame, left_out: pd.DataFrame, search_seq
             get_rand_samp_from_cog(cog, left_out, sampled_cogs, search_seqs, split, being_added_cog)
         )
 
+    with open(f"{OUT_DIR}/cog_matches.txt", "a") as f:
+        print('\n'.join(being_added_cog["id"].values), file=f)
+
     merged = pd.concat([being_added_exact, being_added_cog])
     return merged
 
@@ -91,7 +96,29 @@ def get_search_sequences(split: pd.DataFrame, left_out: pd.DataFrame, search_seq
 def main() -> None:
     """Partition data into 5 splits that make up the search database and generate the search query sequences"""
     df = pd.read_pickle("all_cogs.pkl")
+
+    # i need to make sure that none of the sequences chosen belong to cogs that will be chosen
+
+
+    df['Frequency'] = df.groupby('cog')['cog'].transform('count')
+    # keep the duplicates from the biggest cogs
+    # so that when no_cog_match is taking sequences from the small cogs,
+    # it doesn't take a sequence that belongs to multiple cogs
+    df = df.sort_values('Frequency', ascending=False)
     df = df.drop_duplicates(subset=["id"])
+
+    # put the smallest cogs at the top
+    df = df.sort_values('Frequency', ascending=True)
+    df = df.drop('Frequency', axis=1)
+    no_cog_match = df.head(NUM_NO_SHARED_COG)
+    df = df.iloc[NUM_NO_SHARED_COG:]
+    # remove any remaining sequences from the last removed cog
+    indices_to_remove = df[df["cog"] == no_cog_match.tail(1)["cog"].values[0]].index
+    df = df.drop(indices_to_remove)
+
+    with open(f"{OUT_DIR}/no_cog_matches.txt", "w") as f:
+        print('\n'.join(no_cog_match["id"].values), file=f)
+
     final_db = df.sample(n=TOT_NUM_DATABASE_SEQ)
     left_out = df.merge(final_db, how="outer", indicator=True).loc[lambda x: x["_merge"] == "left_only"]
     left_out = left_out.drop(columns=["_merge"])
@@ -108,9 +135,12 @@ def main() -> None:
         with open(f"{OUT_DIR}/split{i}.fa", "w") as f:
             f.write(to_fasta(split))
 
-    no_cog_match_all = left_out.merge(final_db, how="outer", indicator=True).loc[lambda x: x["_merge"] == "left_only"]
-    no_cog_match_all = no_cog_match_all.drop(columns=["_merge"])
-    no_cog_match = no_cog_match_all.sample(n=NUM_NO_SHARED_COG)
+
+    # no_cog_match_all = left_out.merge(final_db, how="outer", indicator=True).loc[lambda x: x["_merge"] == "left_only"]
+    # no_cog_match_all = no_cog_match_all.drop(columns=["_merge"])
+    # no_cog_match = no_cog_match_all.sample(n=NUM_NO_SHARED_COG)
+
+
     search_seqs = search_seqs.append(no_cog_match)
 
     with open(f"{OUT_DIR}/search.fa", "w") as f:
