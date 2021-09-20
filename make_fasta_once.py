@@ -2,11 +2,11 @@ import random
 import pandas as pd
 import numpy as np
 
-OUT_DIR = "100_delete"
+OUT_DIR = "100"
 RANDOM_STATE = 1
 NUM_SPLITS = 5
-TOT_NUM_DATABASE_SEQ = 1000000
-TOT_NUM_SEARCH_SEQ = 100
+TOT_NUM_DATABASE_SEQ = 100000
+TOT_NUM_SEARCH_SEQ = 1000
 NUM_PER_SECTION = int(TOT_NUM_SEARCH_SEQ * 0.09)
 NUM_NO_SHARED_COG = int(TOT_NUM_SEARCH_SEQ * 0.1)
 REC_COUNT = 0
@@ -102,16 +102,24 @@ def main() -> None:
     # so that when no_cog_match is taking sequences from the small cogs,
     # it doesn't take a sequence that belongs to multiple cogs
     df = df.sort_values("Frequency", ascending=False)
-    df = df.drop_duplicates(subset=["id"])
 
     # put the smallest cogs at the top
     df = df.sort_values("Frequency", ascending=True)
     df = df.drop("Frequency", axis=1)
-    no_cog_match = df.head(NUM_NO_SHARED_COG)
-    df = df.iloc[NUM_NO_SHARED_COG:]
-    # remove any remaining sequences from the last removed cog
-    indices_to_remove = df[df["cog"] == no_cog_match.tail(1)["cog"].values[0]].index
-    df = df.drop(indices_to_remove)
+
+    no_cog_match = df.drop_duplicates(subset=["id"]).head(NUM_NO_SHARED_COG)
+    if no_cog_match.shape != no_cog_match.drop_duplicates(subset=["id"]).shape:
+        # this didn't happen in testing so I am not writing code to fix it now
+        # but it shouldn't happen
+        raise NotImplementedError
+
+    # for each id in the df to remove
+    # get their cogs
+    # get all sequences in the master db that have that cog
+    # remove those sequences
+    df = df[~df["id"].isin(df[df["cog"].isin(df[df["id"].isin(no_cog_match["id"])]["cog"])]["id"])]
+    # remove duplicate samples so that they are not chosen twice
+    df = df.drop_duplicates(subset=["id"])
 
     with open(f"{OUT_DIR}/no_cog_matches.txt", "w") as f:
         print("\n".join(no_cog_match["id"].values), file=f)

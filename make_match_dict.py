@@ -2,10 +2,11 @@ import pickle
 import re
 from collections import defaultdict
 
-IBLAST_RESULTS = "iblast_run"
-MMSEQS_RESULTS = "mmseqs2_run/run_data"
-BLAST_RESULTS = "blast_run"
-DIAMOND_RESULTS = "diamond_run"
+OUT_DIR = "100"
+IBLAST_RESULTS = "100/iblast"
+MMSEQS_RESULTS = "100/mmseqs2/run_data"
+BLAST_RESULTS = "100/blast"
+DIAMOND_RESULTS = "100/diamond"
 
 
 def parse_iblast(i, is_normal_blast):
@@ -26,7 +27,7 @@ def parse_iblast(i, is_normal_blast):
             else:
                 if line.startswith("<Hit_def>"):
                     match_id = re.match(r".*>([^<]+)<.*", line).group(1)
-                elif line.startswith("<Hsp_evalue>"):
+                elif line.startswith("<Hsp_evalue>") and match_id not in [sid for sid, _ in seq_matches[search_id]]:
                     evalue = re.match(r".*>([^<]+)<.*", line).group(1)
                     seq_matches[search_id].append((match_id, evalue))
 
@@ -37,9 +38,9 @@ def parse_mmseqs(i, is_diamond):
     seq_matches = defaultdict(list)
     file_name = ""
     if is_diamond:
-        file_name = f"{DIAMOND_RESULTS}/search{i}.m8"
+        file_name = f"{DIAMOND_RESULTS}/results{i}.tsv"
     else:
-        file_name = f"{MMSEQS_RESULTS}/result{i}.tsv"
+        file_name = f"{MMSEQS_RESULTS}/search{i}.m8"
 
     with open(file_name, "r") as f:
         search_id = ""
@@ -62,19 +63,19 @@ def parse_mmseqs(i, is_diamond):
 def main():  # pylint: disable=too-many-locals
     for i in range(5):
         mm_matches = parse_mmseqs(i, is_diamond=False)
-        with open(f"mm_matches{i}.pkl", "wb") as f:
+        with open(f"{OUT_DIR}/mm_matches{i}.pkl", "wb") as f:
             pickle.dump(mm_matches, f)
 
         di_matches = parse_mmseqs(i, is_diamond=True)
-        with open(f"di_matches{i}.pkl", "wb") as f:
+        with open(f"{OUT_DIR}/di_matches{i}.pkl", "wb") as f:
             pickle.dump(di_matches, f)
 
         ib_matches = parse_iblast(i, is_normal_blast=False)
-        with open(f"ib_matches{i}.pkl", "wb") as f:
+        with open(f"{OUT_DIR}/ib_matches{i}.pkl", "wb") as f:
             pickle.dump(ib_matches, f)
 
         nb_matches = parse_iblast(i, is_normal_blast=True)
-        with open(f"nb_matches{i}.pkl", "wb") as f:
+        with open(f"{OUT_DIR}/nb_matches{i}.pkl", "wb") as f:
             pickle.dump(nb_matches, f)
 
 

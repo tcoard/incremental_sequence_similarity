@@ -8,7 +8,7 @@ IN_FILE = "delete.txt"
 MAX_RETRY = 10
 PROCESS_AT_A_TIME = 20000
 TIMEOUT_TIME = 120
-API_PAUSE_TIME = 0.3334 # if using an API key this has to be >=0.1. If not using an API key, this has to be >=1/3
+API_PAUSE_TIME = 0.3334  # if using an API key this has to be >=0.1. If not using an API key, this has to be >=1/3
 URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&report=genbank&conwithfeat=on&withparts=on&retmode=xml&id="
 
 DATA_DIR = "api_calls"
@@ -164,6 +164,7 @@ async def main():
         await make_calls(seq_ids)
         total_finished += len(seq_ids)
         print(f"finished: {total_finished}")
+
 
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()

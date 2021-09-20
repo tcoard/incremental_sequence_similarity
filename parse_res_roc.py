@@ -1,73 +1,62 @@
 """gets the roc1"""
 import pickle
 from functools import partial
+from collections import defaultdict
 from multiprocessing import Pool
-import pandas as pd
 
-DATA_DIR = "data"
+DATA_DIR = "final_data"
+
+with open("sid_cogs.pkl", "rb") as f:
+    sid_cogs = pickle.load(f)
 
 
-def get_auc(seq_dict, df, current_db_seqs_df, seq_id):
+def get_auc(seq_dict, current_db_seqs_df, seq_id):
     true_pos = 0
     had_false_positive = False
-    for match, evalue in seq_dict[seq_id]:
+    for match, _ in seq_dict[seq_id]:
         # if there are no shared cogs
-        if set(df[df["id"] == match]["cog"].values).isdisjoint(df[df["id"] == seq_id]["cog"].values):
+        if set(sid_cogs[match]).isdisjoint(sid_cogs[seq_id]):
             # print(seq_id, match, evalue)
             had_false_positive = True
             break
         true_pos += 1
-
-    total_seq_with_cog_in_db = current_db_seqs_df[current_db_seqs_df["cog"].isin(df[df["id"] == seq_id]["cog"])].shape[
-        0
-    ]
+    total_seq_with_cog_in_db = sum([len(current_db_seqs_df[cog]) for cog in sid_cogs[seq_id]])
 
     return (true_pos, total_seq_with_cog_in_db, had_false_positive, seq_id)
 
 
-def write_files(i, df, current_db_seqs_df, matches, seq_type):
-    with Pool() as pool:
-        with open(f"{DATA_DIR}/mm_matches{i}.pkl", "rb") as f:
-            mm_matches = pickle.load(f)
-        mmseq_func = partial(get_auc, mm_matches, df, current_db_seqs_df)
-        mmseq_aucs = pool.map(mmseq_func, matches)
-        with open(f"{DATA_DIR}/mmseq_auc_{seq_type}{i}.txt", "w") as out:
-            for auc in mmseq_aucs:
-                out.write(f"{auc}\n")
-                out.write(f"{auc[0]/auc[1]}\n")
+def write_files(i, current_db_seqs_df, matches, alg_type, seq_type):
 
-        with open(f"{DATA_DIR}/ib_matches{i}.pkl", "rb") as f:
-            ib_matches = pickle.load(f)
-        iblast_func = partial(get_auc, ib_matches, df, current_db_seqs_df)
-        iblast_aucs = pool.map(iblast_func, matches)
-        with open(f"{DATA_DIR}/iblast_auc_{seq_type}.txt{i}", "w") as out:
-            for auc in iblast_aucs:
-                out.write(f"{auc}\n")
-                out.write(f"{auc[0]/auc[1]}\n")
+    # with Pool(18) as pool:
+    if alg_type == "mm":
+        in_file_prefix = "mm_matches"
+        out_file_prefix = "mmseq_auc_"
+    elif alg_type == "ib":
+        in_file_prefix = "ib_matches"
+        out_file_prefix = "iblast_auc_"
+    elif alg_type == "nb":
+        in_file_prefix = "nb_matches"
+        out_file_prefix = "nblast_auc_"
+    elif alg_type == "di":
+        in_file_prefix = "di_matches"
+        out_file_prefix = "diamond_auc_"
 
-        with open(f"{DATA_DIR}/nb_matches{i}.pkl", "rb") as f:
-            nb_matches = pickle.load(f)
-        nblast_func = partial(get_auc, nb_matches, df, current_db_seqs_df)
-        nblast_aucs = pool.map(nblast_func, matches)
-        with open(f"{DATA_DIR}/nblast_auc_{seq_type}.txt{i}", "w") as out:
-            for auc in nblast_aucs:
-                out.write(f"{auc}\n")
+    with open(f"{DATA_DIR}/{in_file_prefix}{i}.pkl", "rb") as f:
+        seq_dict = pickle.load(f)
+    # func = partial(get_auc, seq_dict, current_db_seqs_df)
+    # aucs = pool.map(func, matches)
+    for match in matches:
+        auc = get_auc(seq_dict, current_db_seqs_df, match)
+        with open(f"{DATA_DIR}/{out_file_prefix}{seq_type}{i}.txt", "a") as out:
+            # for auc in aucs:
+            out.write(f"{auc}\n")
+            if auc[1] != 0:
                 out.write(f"{auc[0]/auc[1]}\n")
-
-        with open(f"{DATA_DIR}/di_matches{i}.pkl", "rb") as f:
-            di_matches = pickle.load(f)
-        diamond_func = partial(get_auc, di_matches, df, current_db_seqs_df)
-        diamond_aucs = pool.map(diamond_func, matches)
-        with open(f"{DATA_DIR}/diamond_auc_{seq_type}.txt{i}", "w") as out:
-            for auc in diamond_aucs:
-                out.write(f"{auc}\n")
-                out.write(f"{auc[0]/auc[1]}\n")
+            else:
+                out.write(f"NaN\n")
 
 
 def main():  # pylint: disable=too-many-locals
-    df = pd.read_pickle("all_cogs.pkl")
-    # need to save space with pool.map
-    df = df.drop(columns=["seq"])
 
     exact_matches = []
     with open(f"{DATA_DIR}/exact_matches.txt", "r") as f:
@@ -87,11 +76,17 @@ def main():  # pylint: disable=too-many-locals
             for line in f:
                 if line.startswith(">"):
                     current_db_seqs.append(line.strip()[1:])
-        current_db_seqs_df = df[df["id"].isin(current_db_seqs)]
+        # current_db_seqs_df = df[df["id"].isin(current_db_seqs)]
+        # current_db_seqs_df = {sid: sid_cogs[sid] for sid in current_db_seqs}
+        current_db_seqs_df = defaultdict(list)
+        for sid in current_db_seqs:
+            for cog in sid_cogs[sid]:
+                current_db_seqs_df[cog].append(sid)
 
-        write_files(i, df, current_db_seqs_df, exact_matches, "exact")
-        write_files(i, df, current_db_seqs_df, cog_matches, "cog")
-        write_files(i, df, current_db_seqs_df, no_cog_matches, "no_cog")
+        for alg_type in ("mm", "ib", "nb", "di"):
+            write_files(i, current_db_seqs_df, exact_matches, alg_type, "exact")
+            write_files(i, current_db_seqs_df, cog_matches, alg_type, "cog")
+            write_files(i, current_db_seqs_df, no_cog_matches, alg_type, "no_cog")
 
 
 if __name__ == "__main__":

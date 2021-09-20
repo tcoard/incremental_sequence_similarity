@@ -3,6 +3,7 @@ import re
 from collections import defaultdict
 import pandas as pd
 import seaborn as sns
+
 # import pickle
 
 IBLAST_RESULTS = "1k_iblast_latest"
@@ -73,7 +74,7 @@ def parse_mmseqs(i):
     return seq_matches
 
 
-def main(): # pylint: disable=too-many-locals
+def main():  # pylint: disable=too-many-locals
     df = pd.read_pickle("all_cogs.pkl")
 
     # for i in range(5):

@@ -2,7 +2,7 @@
 
 THREADS=48
 
-# make blast databases for each split 
+# make blast databases for each split
 time makeblastdb -in db0.fa -dbtype prot -blastdb_version 5
 time makeblastdb -in db1.fa -dbtype prot -blastdb_version 5
 time makeblastdb -in db2.fa -dbtype prot -blastdb_version 5
